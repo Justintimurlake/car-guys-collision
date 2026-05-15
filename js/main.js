@@ -106,19 +106,31 @@ document.addEventListener('DOMContentLoaded', () => {
       const setupScrub = () => {
         if (!pinnedVideo || !pinnedVideo.duration) return;
 
-        // Scroll drives video.currentTime on every device.
-        // The all-keyframe encoded scroll-smooth.mp4 lets mobile browsers
-        // seek instantly without decoder lag.
-        pinnedVideo.pause();
+        pinnedVideo.muted = true;
+        pinnedVideo.playsInline = true;
         pinnedVideo.loop = false;
 
-        // Show first frame immediately so the section never appears black
-        // before the user starts scrolling.
-        if (pinnedVideo.currentTime === 0) {
-          pinnedVideo.currentTime = 0.05;
-        }
+        // iOS Safari requires a user gesture before video.currentTime
+        // can be set programmatically. Standard unlock: play() then pause()
+        // — once from JS (might fail on Safari), and again on the first
+        // touch/click/scroll which IS a user gesture.
+        let unlocked = false;
+        const unlock = async () => {
+          if (unlocked) return;
+          try {
+            await pinnedVideo.play();
+            pinnedVideo.pause();
+            // Jump past frame 0 in case it's a fade-in black frame.
+            pinnedVideo.currentTime = 0.1;
+            unlocked = true;
+          } catch (e) { /* will retry on user gesture */ }
+        };
+        unlock();
+        ['touchstart', 'touchend', 'click', 'scroll', 'wheel'].forEach(ev =>
+          window.addEventListener(ev, unlock, { once: false, passive: true, capture: true })
+        );
 
-        let targetTime = 0;
+        let targetTime = 0.1;
         let isSeeking = false;
         pinnedVideo.addEventListener('seeking', () => { isSeeking = true; });
         pinnedVideo.addEventListener('seeked', () => { isSeeking = false; });
@@ -127,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (pinnedVideo.duration && !isSeeking) {
             const delta = targetTime - pinnedVideo.currentTime;
             if (Math.abs(delta) > 0.04) {
-              pinnedVideo.currentTime = targetTime;
+              try { pinnedVideo.currentTime = targetTime; } catch (e) {}
             }
           }
           requestAnimationFrame(tick);
@@ -138,10 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
           trigger: pinnedSection,
           start: 'top top',
           end: () => `+=${pinnedSection.offsetHeight - window.innerHeight}`,
-          scrub: isMobile ? 0.6 : 1.2,
+          scrub: isMobile ? 0.4 : 1.2,
           invalidateOnRefresh: true,
           onUpdate: self => {
-            targetTime = Math.max(0.05, self.progress * pinnedVideo.duration);
+            targetTime = Math.max(0.1, self.progress * pinnedVideo.duration);
             const idx = Math.min(panels.length - 1, Math.floor(self.progress * panels.length));
             activatePanel(idx);
           }
