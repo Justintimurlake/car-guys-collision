@@ -106,34 +106,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const setupScrub = () => {
         if (!pinnedVideo || !pinnedVideo.duration) return;
 
-        // Mobile/tablet: just autoplay-loop the video.
-        // Scroll-driven scrubbing is unreliable on mobile browsers (iOS Safari
-        // throttles video seeks heavily, Android Chrome similar). Better UX:
-        // continuous video with panels still driven by scroll.
-        if (isMobile) {
-          pinnedVideo.loop = true;
-          const tryPlay = () => pinnedVideo.play().catch(() => {});
-          tryPlay();
-          ['touchstart', 'click', 'scroll'].forEach(ev =>
-            window.addEventListener(ev, tryPlay, { once: true, passive: true })
-          );
-
-          ScrollTrigger.create({
-            trigger: pinnedSection,
-            start: 'top top',
-            end: () => `+=${pinnedSection.offsetHeight - window.innerHeight}`,
-            invalidateOnRefresh: true,
-            onUpdate: self => {
-              const idx = Math.min(panels.length - 1, Math.floor(self.progress * panels.length));
-              activatePanel(idx);
-            }
-          });
-          return;
-        }
-
-        // Desktop: scroll drives video.currentTime.
+        // Scroll drives video.currentTime on every device.
+        // The all-keyframe encoded scroll-smooth.mp4 lets mobile browsers
+        // seek instantly without decoder lag.
         pinnedVideo.pause();
         pinnedVideo.loop = false;
+
+        // Show first frame immediately so the section never appears black
+        // before the user starts scrolling.
+        if (pinnedVideo.currentTime === 0) {
+          pinnedVideo.currentTime = 0.05;
+        }
 
         let targetTime = 0;
         let isSeeking = false;
@@ -155,10 +138,10 @@ document.addEventListener('DOMContentLoaded', () => {
           trigger: pinnedSection,
           start: 'top top',
           end: () => `+=${pinnedSection.offsetHeight - window.innerHeight}`,
-          scrub: 1.2,
+          scrub: isMobile ? 0.6 : 1.2,
           invalidateOnRefresh: true,
           onUpdate: self => {
-            targetTime = self.progress * pinnedVideo.duration;
+            targetTime = Math.max(0.05, self.progress * pinnedVideo.duration);
             const idx = Math.min(panels.length - 1, Math.floor(self.progress * panels.length));
             activatePanel(idx);
           }
