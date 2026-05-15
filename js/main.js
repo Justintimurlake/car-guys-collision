@@ -106,7 +106,32 @@ document.addEventListener('DOMContentLoaded', () => {
       const setupScrub = () => {
         if (!pinnedVideo || !pinnedVideo.duration) return;
 
-        // Keep video paused — scroll drives currentTime.
+        // Mobile/tablet: just autoplay-loop the video.
+        // Scroll-driven scrubbing is unreliable on mobile browsers (iOS Safari
+        // throttles video seeks heavily, Android Chrome similar). Better UX:
+        // continuous video with panels still driven by scroll.
+        if (isMobile) {
+          pinnedVideo.loop = true;
+          const tryPlay = () => pinnedVideo.play().catch(() => {});
+          tryPlay();
+          ['touchstart', 'click', 'scroll'].forEach(ev =>
+            window.addEventListener(ev, tryPlay, { once: true, passive: true })
+          );
+
+          ScrollTrigger.create({
+            trigger: pinnedSection,
+            start: 'top top',
+            end: () => `+=${pinnedSection.offsetHeight - window.innerHeight}`,
+            invalidateOnRefresh: true,
+            onUpdate: self => {
+              const idx = Math.min(panels.length - 1, Math.floor(self.progress * panels.length));
+              activatePanel(idx);
+            }
+          });
+          return;
+        }
+
+        // Desktop: scroll drives video.currentTime.
         pinnedVideo.pause();
         pinnedVideo.loop = false;
 
@@ -115,9 +140,6 @@ document.addEventListener('DOMContentLoaded', () => {
         pinnedVideo.addEventListener('seeking', () => { isSeeking = true; });
         pinnedVideo.addEventListener('seeked', () => { isSeeking = false; });
 
-        // Each animation frame, if we're not already seeking and the target
-        // is more than ~one frame away, request the next seek. This avoids
-        // queuing seeks faster than the decoder can complete them.
         const tick = () => {
           if (pinnedVideo.duration && !isSeeking) {
             const delta = targetTime - pinnedVideo.currentTime;
@@ -188,8 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    /* Section reveals — stories intro, contact, footer */
-    gsap.utils.toArray('.stories__intro, .contact__inner, .footer__inner').forEach(el => {
+    /* Section reveals — stories intro and contact (footer stays always visible) */
+    gsap.utils.toArray('.stories__intro, .contact__inner').forEach(el => {
       gsap.from(el, {
         y: 50,
         opacity: 0,
@@ -197,8 +219,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ease: 'power2.out',
         scrollTrigger: {
           trigger: el,
-          start: 'top 80%',
-          toggleActions: 'play none none reverse'
+          start: 'top 85%',
+          toggleActions: 'play none none none'
         }
       });
     });
