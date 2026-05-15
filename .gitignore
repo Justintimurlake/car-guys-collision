@@ -6,3 +6,12 @@ node_modules/
 .vscode/
 .idea/
 Thumbs.db
+
+# Claude Code local settings
+.claude/
+
+# Duplicate root source files (canonical copies live in assets/)
+/1.mp4
+/2.mp4
+/hf_*.mp4
+/hf_*.png
